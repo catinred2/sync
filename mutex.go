@@ -2,8 +2,8 @@ package sync
 
 import (
 	"fmt"
-	"github.com/funny/util/debug"
-	"github.com/funny/util/goid"
+	"github.com/funny/debug"
+	"github.com/funny/goid"
 	"os"
 	"strconv"
 	"sync"
