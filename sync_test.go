@@ -22,18 +22,8 @@ func Benchmark_Lock2(b *testing.B) {
 	}
 }
 
-func Benchmark_Lock3(b *testing.B) {
-	WatchDeadLock = 0
-	var mutex Mutex
-	for i := 0; i < b.N; i++ {
-		mutex.Lock()
-		mutex.Unlock()
-	}
-	WatchDeadLock = 1
-}
-
 func Test_DeadLock1(t *testing.T) {
-	var testDone sync.WaitGroup
+	var testDone WaitGroup
 	testDone.Add(1)
 
 	go func() {
@@ -57,7 +47,7 @@ func Test_DeadLock1(t *testing.T) {
 }
 
 func Test_DeadLock2(t *testing.T) {
-	var testDone sync.WaitGroup
+	var testDone WaitGroup
 	testDone.Add(1)
 
 	go func() {
@@ -70,7 +60,7 @@ func Test_DeadLock2(t *testing.T) {
 		mutex1 Mutex
 		mutex2 Mutex
 
-		wait1 sync.WaitGroup
+		wait1 WaitGroup
 	)
 
 	wait1.Add(1)
@@ -94,7 +84,7 @@ func Test_DeadLock2(t *testing.T) {
 }
 
 func Test_DeadLock3(t *testing.T) {
-	var testDone sync.WaitGroup
+	var testDone WaitGroup
 	testDone.Add(1)
 
 	go func() {
@@ -108,8 +98,8 @@ func Test_DeadLock3(t *testing.T) {
 		mutex2 Mutex
 		mutex3 Mutex
 
-		wait1 sync.WaitGroup
-		wait2 sync.WaitGroup
+		wait1 WaitGroup
+		wait2 WaitGroup
 	)
 
 	wait1.Add(1)

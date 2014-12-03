@@ -1,3 +1,5 @@
+// +build deadlock
+
 package sync
 
 import (
@@ -11,7 +13,41 @@ import (
 	"sync/atomic"
 )
 
-var WatchDeadLock int32 = 1
+type Mutex struct {
+	mutexInfo
+	sync.Mutex
+}
+
+func (m *Mutex) Lock() {
+	holder, elem := m.mutexInfo.wait()
+	m.Mutex.Lock()
+	m.mutexInfo.using(holder, elem)
+}
+
+func (m *Mutex) Unlock() {
+	m.mutexInfo.release()
+	m.Mutex.Unlock()
+}
+
+type RWMutex struct {
+	Mutex
+}
+
+func (rw *RWMutex) Lock() {
+	rw.Lock()
+}
+
+func (rw *RWMutex) Unlock() {
+	rw.Unlock()
+}
+
+func (rw *RWMutex) RLock() {
+	rw.Lock()
+}
+
+func (rw *RWMutex) RUnlock() {
+	rw.Unlock()
+}
 
 var (
 	lockMutex      = new(sync.Mutex)
@@ -33,7 +69,6 @@ func goroutine(id int32, stack []byte) []byte {
 type mutexInfo struct {
 	holder  int32
 	waiting *list.List
-	watch   bool
 }
 
 func (lock *mutexInfo) wait() (int32, *list.Element) {
@@ -84,48 +119,4 @@ func (lock *mutexInfo) using(holder int32, elem *list.Element) {
 
 func (lock *mutexInfo) release() {
 	atomic.StoreInt32(&lock.holder, 0)
-}
-
-type Mutex struct {
-	mutexInfo
-	sync.Mutex
-}
-
-func (m *Mutex) Lock() {
-	m.mutexInfo.watch = atomic.LoadInt32(&WatchDeadLock) == 1
-
-	if m.mutexInfo.watch {
-		holder, elem := m.mutexInfo.wait()
-		m.Mutex.Lock()
-		m.mutexInfo.using(holder, elem)
-	} else {
-		m.Mutex.Lock()
-	}
-}
-
-func (m *Mutex) Unlock() {
-	if m.mutexInfo.watch {
-		m.mutexInfo.release()
-	}
-	m.Mutex.Unlock()
-}
-
-type RWMutex struct {
-	Mutex
-}
-
-func (rw *RWMutex) Lock() {
-	rw.Lock()
-}
-
-func (rw *RWMutex) Unlock() {
-	rw.Unlock()
-}
-
-func (rw *RWMutex) RLock() {
-	rw.Lock()
-}
-
-func (rw *RWMutex) RUnlock() {
-	rw.Unlock()
 }
