@@ -48,7 +48,6 @@ func (lock *mutexInfo) wait() (int32, *list.Element) {
 	}
 
 	lock.verify(holder, []*mutexInfo{lock})
-
 	return holder, lock.waiting.PushBack(holder)
 }
 
@@ -79,7 +78,6 @@ func (lock *mutexInfo) using(holder int32, elem *list.Element) {
 	defer lockMutex.Unlock()
 
 	delete(waitTargets, holder)
-
 	atomic.StoreInt32(&lock.holder, holder)
 	lock.waiting.Remove(elem)
 }
@@ -110,4 +108,24 @@ func (m *Mutex) Unlock() {
 		m.mutexInfo.release()
 	}
 	m.Mutex.Unlock()
+}
+
+type RWMutex struct {
+	Mutex
+}
+
+func (rw *RWMutex) Lock() {
+	rw.Lock()
+}
+
+func (rw *RWMutex) Unlock() {
+	rw.Unlock()
+}
+
+func (rw *RWMutex) RLock() {
+	rw.Lock()
+}
+
+func (rw *RWMutex) RUnlock() {
+	rw.Unlock()
 }
