@@ -4,11 +4,10 @@ package sync
 
 import (
 	"bytes"
+	"github.com/funny/debug"
 	"github.com/funny/goid"
-	"runtime/pprof"
 	"strconv"
 	"sync"
-	"sync/atomic"
 )
 
 type Mutex struct {
@@ -17,9 +16,9 @@ type Mutex struct {
 }
 
 func (m *Mutex) Lock() {
-	holder := m.mointor.wait()
+	holder, holderStack := m.mointor.wait()
 	m.Mutex.Lock()
-	m.mointor.using(holder)
+	m.mointor.using(holder, holderStack)
 }
 
 func (m *Mutex) Unlock() {
@@ -51,70 +50,58 @@ var (
 	globalMutex    = new(sync.Mutex)
 	waitTargets    = make(map[int32]*mointor)
 	goroutineBegin = []byte("goroutine ")
-	goroutineEnd   = []byte("\n\n")
+	newline        = []byte{'\n'}
 )
 
 type mointor struct {
-	holder int32
+	holder      int32
+	holderStack debug.StackInfo
 }
 
-func (m *mointor) wait() int32 {
+func (m *mointor) wait() (int32, debug.StackInfo) {
 	globalMutex.Lock()
 	defer globalMutex.Unlock()
 
 	holder := goid.Get()
+	holderStack := debug.StackTrace(3, 0)
 	waitTargets[holder] = m
 
-	m.verify(holder, []int32{holder})
-	return holder
+	m.verify([]*mointor{{holder, holderStack}})
+
+	return holder, holderStack
 }
 
-func (m *mointor) verify(holder int32, holderLink []int32) {
+func (m *mointor) verify(holderLink []*mointor) {
 	if m.holder != 0 {
 		// deadlock detected
-		if m.holder == holder {
-			// dump stack
-			stackBuf := new(bytes.Buffer)
-			prof := pprof.Lookup("goroutine")
-			prof.WriteTo(stackBuf, 2)
-			stack := stackBuf.Bytes()
-
-			// match goroutines
+		if m.holder == holderLink[0].holder {
 			buf := new(bytes.Buffer)
 			buf.WriteString("[DEAD LOCK]\n")
-			buf.Write(traceGoroutine(holder, stack))
-			buf.Write(goroutineEnd)
 			for i := 0; i < len(holderLink); i++ {
-				buf.Write(traceGoroutine(holderLink[i], stack))
-				buf.Write(goroutineEnd)
+				buf.Write(goroutineBegin)
+				buf.WriteString(strconv.Itoa(int(holderLink[i].holder)))
+				buf.Write(newline)
+				buf.Write(holderLink[i].holderStack.Bytes("  "))
 			}
 			panic(DeadlockError(buf.String()))
 		}
 		// the lock holder is waiting for another lock
 		if waitTarget, exists := waitTargets[m.holder]; exists {
-			waitTarget.verify(holder, append(holderLink, m.holder))
+			waitTarget.verify(append(holderLink, m))
 		}
 	}
 }
 
-func (m *mointor) using(holder int32) {
+func (m *mointor) using(holder int32, holderStack debug.StackInfo) {
 	globalMutex.Lock()
 	defer globalMutex.Unlock()
 
 	delete(waitTargets, holder)
-	atomic.StoreInt32(&m.holder, holder)
+	m.holder = holder
+	m.holderStack = holderStack
 }
 
 func (m *mointor) release() {
-	atomic.StoreInt32(&m.holder, 0)
-}
-
-func traceGoroutine(id int32, stack []byte) []byte {
-	head := append(strconv.AppendInt(goroutineBegin, int64(id), 10), ' ')
-	begin := bytes.Index(stack, head)
-	end := bytes.Index(stack[begin:], goroutineEnd)
-	if end == -1 {
-		end = len(stack) - begin
-	}
-	return stack[begin : begin+end]
+	m.holder = 0
+	m.holderStack = nil
 }

@@ -15,119 +15,94 @@ func init() {
 	}()
 }
 
-func testRecover(err interface{}, testDone chan int) {
-	if err != nil {
-		switch err.(type) {
-		case DeadlockError:
-			if testing.Verbose() {
-				println(err.(DeadlockError).Error())
+func deadlockTest(t *testing.T, callback func()) {
+	testDone := make(chan interface{})
+
+	go func() {
+		defer func() {
+			testDone <- recover()
+		}()
+		callback()
+	}()
+
+	select {
+	case err := <-testDone:
+		if err != nil {
+			switch err.(type) {
+			case DeadlockError:
+				if testing.Verbose() {
+					println(err.(DeadlockError).Error())
+				}
+			default:
+				panic(err)
 			}
-			testDone <- 1
-		default:
-			panic(err)
 		}
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
 	}
+
 }
 
 func Test_DeadLock1(t *testing.T) {
-	testDone := make(chan int)
-
-	var mutex1 Mutex
-
-	go func() {
-		defer func() {
-			err := recover()
-			testRecover(err, testDone)
-		}()
+	deadlockTest(t, func() {
+		var mutex1 Mutex
 
 		mutex1.Lock()
 		mutex1.Lock()
-	}()
-
-	select {
-	case <-testDone:
-	case <-time.After(time.Second):
-		t.Fatal("timeout")
-	}
+	})
 }
 
 func Test_DeadLock2(t *testing.T) {
-	testDone := make(chan int)
+	deadlockTest(t, func() {
+		var (
+			mutex1 Mutex
+			mutex2 Mutex
+		)
 
-	var (
-		mutex1 Mutex
-		mutex2 Mutex
+		mutex1.Lock()
 
-		wait1 WaitGroup
-	)
-
-	wait1.Add(1)
-	go func() {
-		defer func() {
-			err := recover()
-			testRecover(err, testDone)
+		var wait1 WaitGroup
+		wait1.Add(1)
+		go func() {
+			mutex2.Lock()
+			wait1.Done()
+			mutex1.Lock()
 		}()
-
-		mutex1.Lock()
 		wait1.Wait()
-		mutex2.Lock()
-	}()
 
-	go func() {
 		mutex2.Lock()
-		wait1.Done()
-		mutex1.Lock()
-	}()
-
-	select {
-	case <-testDone:
-	case <-time.After(time.Second):
-		t.Fatal("timeout")
-	}
+	})
 }
 
 func Test_DeadLock3(t *testing.T) {
-	testDone := make(chan int)
+	deadlockTest(t, func() {
+		var (
+			mutex1 Mutex
+			mutex2 Mutex
+			mutex3 Mutex
+		)
 
-	var (
-		mutex1 Mutex
-		mutex2 Mutex
-		mutex3 Mutex
+		mutex1.Lock()
 
-		wait1 WaitGroup
-		wait2 WaitGroup
-	)
+		var wait1 WaitGroup
+		wait1.Add(1)
+		go func() {
+			mutex2.Lock()
 
-	wait1.Add(1)
-	wait2.Add(1)
+			var wait2 WaitGroup
+			wait2.Add(1)
+			go func() {
+				mutex3.Lock()
+				wait2.Done()
+				mutex2.Lock()
+			}()
+			wait2.Wait()
 
-	go func() {
-		defer func() {
-			err := recover()
-			testRecover(err, testDone)
+			wait1.Done()
+			mutex1.Lock()
 		}()
-
-		mutex1.Lock()
 		wait1.Wait()
-		mutex2.Lock()
-	}()
 
-	go func() {
-		mutex2.Lock()
-		wait2.Wait()
-		wait1.Done()
 		mutex3.Lock()
-	}()
-
-	go func() {
-		mutex3.Lock()
-		wait2.Done()
-		mutex1.Lock()
-	}()
-
-	select {
-	case <-testDone:
-	case <-time.After(time.Second):
-		t.Fatal("timeout")
-	}
+	})
 }
