@@ -4,7 +4,6 @@ package sync
 
 import (
 	"bytes"
-	"container/list"
 	"fmt"
 	"github.com/funny/goid"
 	"runtime/pprof"
@@ -19,9 +18,9 @@ type Mutex struct {
 }
 
 func (m *Mutex) Lock() {
-	holder, elem := m.mointor.wait()
+	holder := m.mointor.wait()
 	m.Mutex.Lock()
-	m.mointor.using(holder, elem)
+	m.mointor.using(holder)
 }
 
 func (m *Mutex) Unlock() {
@@ -57,23 +56,18 @@ var (
 )
 
 type mointor struct {
-	holder  int32
-	waiting *list.List
+	holder int32
 }
 
-func (m *mointor) wait() (int32, *list.Element) {
+func (m *mointor) wait() int32 {
 	globalMutex.Lock()
 	defer globalMutex.Unlock()
 
 	holder := goid.Get()
 	waitTargets[holder] = m
 
-	if m.waiting == nil {
-		m.waiting = list.New()
-	}
-
 	m.verify(holder, []int32{holder})
-	return holder, m.waiting.PushBack(holder)
+	return holder
 }
 
 func (m *mointor) verify(holder int32, holderLink []int32) {
@@ -100,13 +94,12 @@ func (m *mointor) verify(holder int32, holderLink []int32) {
 	}
 }
 
-func (m *mointor) using(holder int32, elem *list.Element) {
+func (m *mointor) using(holder int32) {
 	globalMutex.Lock()
 	defer globalMutex.Unlock()
 
 	delete(waitTargets, holder)
 	atomic.StoreInt32(&m.holder, holder)
-	m.waiting.Remove(elem)
 }
 
 func (m *mointor) release() {
