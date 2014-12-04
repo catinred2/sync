@@ -71,6 +71,7 @@ func (m *mointor) wait() int32 {
 
 func (m *mointor) verify(holder int32, holderLink []int32) {
 	if m.holder != 0 {
+		// deadlock detected
 		if m.holder == holder {
 			// dump stack
 			stackBuf := new(bytes.Buffer)
@@ -89,8 +90,9 @@ func (m *mointor) verify(holder int32, holderLink []int32) {
 			}
 			panic(buf.String())
 		}
+		// the lock holder is waiting for another lock
 		if waitTarget, exists := waitTargets[m.holder]; exists {
-			waitTarget.verify(holder, append(holderLink, waitTarget.holder))
+			waitTarget.verify(holder, append(holderLink, m.holder))
 		}
 	}
 }
