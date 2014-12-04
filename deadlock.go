@@ -88,7 +88,7 @@ func (m *mointor) verify(holder int32, holderLink []int32) {
 				buf.Write(traceGoroutine(holderLink[i], stack))
 				buf.Write(goroutineEnd)
 			}
-			panic(buf.String())
+			panic(DeadlockError(buf.String()))
 		}
 		// the lock holder is waiting for another lock
 		if waitTarget, exists := waitTargets[m.holder]; exists {

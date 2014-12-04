@@ -1,7 +1,8 @@
+// +build deadlock
+
 package sync
 
 import (
-	"sync"
 	"testing"
 	"time"
 )
@@ -14,43 +15,44 @@ func init() {
 	}()
 }
 
-func Benchmark_Lock1(b *testing.B) {
-	var mutex sync.Mutex
-	for i := 0; i < b.N; i++ {
-		mutex.Lock()
-		mutex.Unlock()
-	}
-}
-
-func Benchmark_Lock2(b *testing.B) {
-	var mutex Mutex
-	for i := 0; i < b.N; i++ {
-		mutex.Lock()
-		mutex.Unlock()
+func testRecover(err interface{}, testDone chan int) {
+	if err != nil {
+		switch err.(type) {
+		case DeadlockError:
+			if testing.Verbose() {
+				println(err.(DeadlockError).Error())
+			}
+			testDone <- 1
+		default:
+			panic(err)
+		}
 	}
 }
 
 func Test_DeadLock1(t *testing.T) {
-	var testDone WaitGroup
-	testDone.Add(1)
+	testDone := make(chan int)
 
 	var mutex1 Mutex
 
 	go func() {
 		defer func() {
-			println(recover().(string))
-			testDone.Done()
+			err := recover()
+			testRecover(err, testDone)
 		}()
+
 		mutex1.Lock()
 		mutex1.Lock()
 	}()
 
-	testDone.Wait()
+	select {
+	case <-testDone:
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
 }
 
 func Test_DeadLock2(t *testing.T) {
-	var testDone WaitGroup
-	testDone.Add(1)
+	testDone := make(chan int)
 
 	var (
 		mutex1 Mutex
@@ -62,9 +64,10 @@ func Test_DeadLock2(t *testing.T) {
 	wait1.Add(1)
 	go func() {
 		defer func() {
-			println(recover().(string))
-			testDone.Done()
+			err := recover()
+			testRecover(err, testDone)
 		}()
+
 		mutex1.Lock()
 		wait1.Wait()
 		mutex2.Lock()
@@ -76,12 +79,15 @@ func Test_DeadLock2(t *testing.T) {
 		mutex1.Lock()
 	}()
 
-	testDone.Wait()
+	select {
+	case <-testDone:
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
 }
 
 func Test_DeadLock3(t *testing.T) {
-	var testDone WaitGroup
-	testDone.Add(1)
+	testDone := make(chan int)
 
 	var (
 		mutex1 Mutex
@@ -97,9 +103,10 @@ func Test_DeadLock3(t *testing.T) {
 
 	go func() {
 		defer func() {
-			println(recover().(string))
-			testDone.Done()
+			err := recover()
+			testRecover(err, testDone)
 		}()
+
 		mutex1.Lock()
 		wait1.Wait()
 		mutex2.Lock()
@@ -118,5 +125,9 @@ func Test_DeadLock3(t *testing.T) {
 		mutex1.Lock()
 	}()
 
-	testDone.Wait()
+	select {
+	case <-testDone:
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
 }

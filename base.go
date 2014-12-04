@@ -28,3 +28,9 @@ type Pool struct {
 type WaitGroup struct {
 	sync.WaitGroup
 }
+
+type DeadlockError string
+
+func (err DeadlockError) Error() string {
+	return string(err)
+}
