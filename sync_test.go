@@ -6,6 +6,14 @@ import (
 	"time"
 )
 
+func init() {
+	go func() {
+		for {
+			time.Sleep(time.Second)
+		}
+	}()
+}
+
 func Benchmark_Lock1(b *testing.B) {
 	var mutex sync.Mutex
 	for i := 0; i < b.N; i++ {
@@ -26,12 +34,6 @@ func Test_DeadLock1(t *testing.T) {
 	var testDone WaitGroup
 	testDone.Add(1)
 
-	go func() {
-		for {
-			time.Sleep(time.Second)
-		}
-	}()
-
 	var mutex1 Mutex
 
 	go func() {
@@ -49,12 +51,6 @@ func Test_DeadLock1(t *testing.T) {
 func Test_DeadLock2(t *testing.T) {
 	var testDone WaitGroup
 	testDone.Add(1)
-
-	go func() {
-		for {
-			time.Sleep(time.Second)
-		}
-	}()
 
 	var (
 		mutex1 Mutex
@@ -86,12 +82,6 @@ func Test_DeadLock2(t *testing.T) {
 func Test_DeadLock3(t *testing.T) {
 	var testDone WaitGroup
 	testDone.Add(1)
-
-	go func() {
-		for {
-			time.Sleep(time.Second)
-		}
-	}()
 
 	var (
 		mutex1 Mutex

@@ -48,13 +48,13 @@ func MyFunc() {
 例如这样：
 
 ```
-go build -tags 'deadlock' myproject
+go build -tags deadlock myproject
 ```
 
 同样这个标签也用于单元测试，否则默认的单元测试会死锁：
 
 ```
-go test -tags 'deadlock'
+go test -tags deadlock -v
 ```
 
 

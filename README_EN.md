@@ -48,13 +48,13 @@ When you need to compile a deadlock detection enabled version. Just add `deadloc
 For example:
 
 ```
-go build -tags 'deadlock' myproject
+go build -tags deadlock myproject
 ```
 
 This tag used for the unit test too. Otherwise the default unit test will deadlock:
 
 ```
-go test -tags 'deadlock'
+go test -tags deadlock -v
 ```
 
 How it works
