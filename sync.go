@@ -14,18 +14,18 @@ import (
 )
 
 type Mutex struct {
-	mutexInfo
+	mointor
 	sync.Mutex
 }
 
 func (m *Mutex) Lock() {
-	holder, elem := m.mutexInfo.wait()
+	holder, elem := m.mointor.wait()
 	m.Mutex.Lock()
-	m.mutexInfo.using(holder, elem)
+	m.mointor.using(holder, elem)
 }
 
 func (m *Mutex) Unlock() {
-	m.mutexInfo.release()
+	m.mointor.release()
 	m.Mutex.Unlock()
 }
 
@@ -50,13 +50,70 @@ func (rw *RWMutex) RUnlock() {
 }
 
 var (
-	lockMutex      = new(sync.Mutex)
-	waitTargets    = make(map[int32]*mutexInfo)
+	globalMutex    = new(sync.Mutex)
+	waitTargets    = make(map[int32]*mointor)
 	goroutineBegin = []byte("goroutine ")
 	goroutineEnd   = []byte("\n\n")
 )
 
-func goroutine(id int32, stack []byte) []byte {
+type mointor struct {
+	holder  int32
+	waiting *list.List
+}
+
+func (m *mointor) wait() (int32, *list.Element) {
+	globalMutex.Lock()
+	defer globalMutex.Unlock()
+
+	holder := goid.Get()
+	waitTargets[holder] = m
+
+	if m.waiting == nil {
+		m.waiting = list.New()
+	}
+
+	m.verify(holder, []int32{holder})
+	return holder, m.waiting.PushBack(holder)
+}
+
+func (m *mointor) verify(holder int32, holderLink []int32) {
+	if m.holder != 0 {
+		if m.holder == holder {
+			buf := new(bytes.Buffer)
+			fmt.Fprintln(buf, "[DEAD LOCK]\n")
+
+			// dump goroutines
+			stackBuf := new(bytes.Buffer)
+			prof := pprof.Lookup("goroutine")
+			prof.WriteTo(stackBuf, 2)
+			stack := stackBuf.Bytes()
+			fmt.Fprintf(buf, "%s\n\n", traceGoroutine(holder, stack))
+			for i := 0; i < len(holderLink); i++ {
+				fmt.Fprintf(buf, "%s\n\n", traceGoroutine(holderLink[i], stack))
+			}
+
+			panic(buf.String())
+		}
+		if waitTarget, exists := waitTargets[m.holder]; exists {
+			waitTarget.verify(holder, append(holderLink, waitTarget.holder))
+		}
+	}
+}
+
+func (m *mointor) using(holder int32, elem *list.Element) {
+	globalMutex.Lock()
+	defer globalMutex.Unlock()
+
+	delete(waitTargets, holder)
+	atomic.StoreInt32(&m.holder, holder)
+	m.waiting.Remove(elem)
+}
+
+func (m *mointor) release() {
+	atomic.StoreInt32(&m.holder, 0)
+}
+
+func traceGoroutine(id int32, stack []byte) []byte {
 	head := append(strconv.AppendInt(goroutineBegin, int64(id), 10), ' ')
 	begin := bytes.Index(stack, head)
 	end := bytes.Index(stack[begin:], goroutineEnd)
@@ -64,59 +121,4 @@ func goroutine(id int32, stack []byte) []byte {
 		end = len(stack) - begin
 	}
 	return stack[begin : begin+end]
-}
-
-type mutexInfo struct {
-	holder  int32
-	waiting *list.List
-}
-
-func (lock *mutexInfo) wait() (int32, *list.Element) {
-	lockMutex.Lock()
-	defer lockMutex.Unlock()
-
-	holder := goid.Get()
-	waitTargets[holder] = lock
-
-	if lock.waiting == nil {
-		lock.waiting = list.New()
-	}
-
-	lock.verify(holder, []*mutexInfo{lock})
-	return holder, lock.waiting.PushBack(holder)
-}
-
-func (lock *mutexInfo) verify(holder int32, link []*mutexInfo) {
-	if lock.holder != 0 {
-		if lock.holder == holder {
-			stackBuf := new(bytes.Buffer)
-			prof := pprof.Lookup("goroutine")
-			prof.WriteTo(stackBuf, 2)
-			stack := stackBuf.Bytes()
-
-			buf := new(bytes.Buffer)
-			fmt.Fprintln(buf, "[DEAD LOCK]\n")
-			fmt.Fprintf(buf, "%s\n\n", goroutine(holder, stack))
-			for i := 0; i < len(link); i++ {
-				fmt.Fprintf(buf, "%s\n\n", goroutine(link[i].holder, stack))
-			}
-			panic(buf.String())
-		}
-		if waitTarget, exists := waitTargets[lock.holder]; exists {
-			waitTarget.verify(holder, append(link, waitTarget))
-		}
-	}
-}
-
-func (lock *mutexInfo) using(holder int32, elem *list.Element) {
-	lockMutex.Lock()
-	defer lockMutex.Unlock()
-
-	delete(waitTargets, holder)
-	atomic.StoreInt32(&lock.holder, holder)
-	lock.waiting.Remove(elem)
-}
-
-func (lock *mutexInfo) release() {
-	atomic.StoreInt32(&lock.holder, 0)
 }

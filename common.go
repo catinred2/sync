@@ -1,14 +1,30 @@
 package sync
 
-import "sync"
+import (
+	"sync"
+	"unsafe"
+)
 
-type Cond sync.Cond
-
-func NewCond(l Locker) *Cond {
-	return (*Cond)(sync.NewCond(l))
+type Cond struct {
+	sync.Cond
 }
 
-type Locker sync.Locker
-type Once sync.Once
-type Pool sync.Pool
-type WaitGroup sync.WaitGroup
+func NewCond(l Locker) *Cond {
+	return (*Cond)(unsafe.Pointer(sync.NewCond(l)))
+}
+
+type Locker struct {
+	sync.Locker
+}
+
+type Once struct {
+	sync.Once
+}
+
+type Pool struct {
+	sync.Pool
+}
+
+type WaitGroup struct {
+	sync.WaitGroup
+}
