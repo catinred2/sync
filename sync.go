@@ -4,7 +4,6 @@ package sync
 
 import (
 	"bytes"
-	"fmt"
 	"github.com/funny/goid"
 	"runtime/pprof"
 	"strconv"
@@ -73,19 +72,21 @@ func (m *mointor) wait() int32 {
 func (m *mointor) verify(holder int32, holderLink []int32) {
 	if m.holder != 0 {
 		if m.holder == holder {
-			buf := new(bytes.Buffer)
-			fmt.Fprintln(buf, "[DEAD LOCK]\n")
-
-			// dump goroutines
+			// dump stack
 			stackBuf := new(bytes.Buffer)
 			prof := pprof.Lookup("goroutine")
 			prof.WriteTo(stackBuf, 2)
 			stack := stackBuf.Bytes()
-			fmt.Fprintf(buf, "%s\n\n", traceGoroutine(holder, stack))
-			for i := 0; i < len(holderLink); i++ {
-				fmt.Fprintf(buf, "%s\n\n", traceGoroutine(holderLink[i], stack))
-			}
 
+			// match goroutines
+			buf := new(bytes.Buffer)
+			buf.WriteString("[DEAD LOCK]\n")
+			buf.Write(traceGoroutine(holder, stack))
+			buf.Write(goroutineEnd)
+			for i := 0; i < len(holderLink); i++ {
+				buf.Write(traceGoroutine(holderLink[i], stack))
+				buf.Write(goroutineEnd)
+			}
 			panic(buf.String())
 		}
 		if waitTarget, exists := waitTargets[m.holder]; exists {
