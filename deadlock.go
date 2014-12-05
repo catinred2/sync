@@ -11,18 +11,18 @@ import (
 )
 
 type Mutex struct {
-	mointor
+	monitor
 	sync.Mutex
 }
 
 func (m *Mutex) Lock() {
-	holder, holderStack := m.mointor.wait()
+	waitInfo := m.monitor.wait()
 	m.Mutex.Lock()
-	m.mointor.using(holder, holderStack)
+	m.monitor.using(waitInfo)
 }
 
 func (m *Mutex) Unlock() {
-	m.mointor.release()
+	m.monitor.release()
 	m.Mutex.Unlock()
 }
 
@@ -47,61 +47,76 @@ func (rw *RWMutex) RUnlock() {
 }
 
 var (
-	globalMutex    = new(sync.Mutex)
-	waitTargets    = make(map[int32]*mointor)
-	goroutineBegin = []byte("goroutine ")
-	newline        = []byte{'\n'}
+	globalMutex = new(sync.Mutex)
+	waitingList = make(map[int32]*waiting)
+	titleStr    = []byte("[DEAD LOCK]\n")
+	goStr       = []byte("goroutine ")
+	waitStr     = []byte(" wait")
+	holdStr     = []byte(" hold")
+	lineStr     = []byte{'\n'}
 )
 
-type mointor struct {
+type monitor struct {
 	holder      int32
 	holderStack debug.StackInfo
 }
 
-func (m *mointor) wait() (int32, debug.StackInfo) {
+type waiting struct {
+	monitor     *monitor
+	holder      int32
+	holderStack debug.StackInfo
+}
+
+func (m *monitor) wait() *waiting {
 	globalMutex.Lock()
 	defer globalMutex.Unlock()
 
-	holder := goid.Get()
-	holderStack := debug.StackTrace(3, 0)
-	waitTargets[holder] = m
+	waitInfo := &waiting{m, goid.Get(), debug.StackTrace(3, 0)}
+	waitingList[waitInfo.holder] = waitInfo
 
-	m.verify([]*mointor{{holder, holderStack}})
+	m.verify([]*waiting{waitInfo})
 
-	return holder, holderStack
+	return waitInfo
 }
 
-func (m *mointor) verify(holderLink []*mointor) {
+func (m *monitor) verify(waitLink []*waiting) {
 	if m.holder != 0 {
 		// deadlock detected
-		if m.holder == holderLink[0].holder {
+		if m.holder == waitLink[0].holder {
 			buf := new(bytes.Buffer)
-			buf.WriteString("[DEAD LOCK]\n")
-			for i := 0; i < len(holderLink); i++ {
-				buf.Write(goroutineBegin)
-				buf.WriteString(strconv.Itoa(int(holderLink[i].holder)))
-				buf.Write(newline)
-				buf.Write(holderLink[i].holderStack.Bytes("  "))
+			buf.Write(titleStr)
+			for i := 0; i < len(waitLink); i++ {
+				buf.Write(goStr)
+				buf.WriteString(strconv.Itoa(int(waitLink[i].holder)))
+				buf.Write(waitStr)
+				buf.Write(lineStr)
+				buf.Write(waitLink[i].holderStack.Bytes("  "))
+
+				buf.Write(goStr)
+				buf.WriteString(strconv.Itoa(int(waitLink[i].monitor.holder)))
+				buf.Write(holdStr)
+				buf.Write(lineStr)
+				buf.Write(waitLink[i].monitor.holderStack.Bytes("  "))
 			}
 			panic(DeadlockError(buf.String()))
 		}
 		// the lock holder is waiting for another lock
-		if waitTarget, exists := waitTargets[m.holder]; exists {
-			waitTarget.verify(append(holderLink, m))
+		if waitInfo, exists := waitingList[m.holder]; exists {
+			waitInfo.monitor.verify(append(waitLink, waitInfo))
 		}
 	}
 }
 
-func (m *mointor) using(holder int32, holderStack debug.StackInfo) {
+func (m *monitor) using(waitInfo *waiting) {
 	globalMutex.Lock()
 	defer globalMutex.Unlock()
 
-	delete(waitTargets, holder)
-	m.holder = holder
-	m.holderStack = holderStack
+	delete(waitingList, waitInfo.holder)
+	m.holder = waitInfo.holder
+	m.holderStack = waitInfo.holderStack
 }
 
-func (m *mointor) release() {
+func (m *monitor) release() {
 	m.holder = 0
 	m.holderStack = nil
 }
