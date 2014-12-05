@@ -106,3 +106,36 @@ func Test_DeadLock3(t *testing.T) {
 		mutex3.Lock()
 	})
 }
+
+func Test_DeadLock4(t *testing.T) {
+	deadlockTest(t, func() {
+		var (
+			mutex1 RWMutex
+			mutex2 RWMutex
+			mutex3 RWMutex
+		)
+
+		mutex1.Lock()
+
+		var wait1 WaitGroup
+		wait1.Add(1)
+		go func() {
+			mutex2.RLock()
+
+			var wait2 WaitGroup
+			wait2.Add(1)
+			go func() {
+				mutex3.Lock()
+				wait2.Done()
+				mutex2.Lock()
+			}()
+			wait2.Wait()
+
+			wait1.Done()
+			mutex1.RLock()
+		}()
+		wait1.Wait()
+
+		mutex3.Lock()
+	})
+}
