@@ -27,23 +27,27 @@ func (m *Mutex) Unlock() {
 }
 
 type RWMutex struct {
-	Mutex
+	monitor
+	sync.RWMutex
 }
 
-func (rw *RWMutex) Lock() {
-	rw.Lock()
+func (m *RWMutex) Lock() {
+	waitInfo := m.monitor.wait()
+	m.RWMutex.Lock()
+	m.monitor.using(waitInfo)
 }
 
-func (rw *RWMutex) Unlock() {
-	rw.Unlock()
+func (m *RWMutex) Unlock() {
+	m.monitor.release()
+	m.RWMutex.Unlock()
 }
 
-func (rw *RWMutex) RLock() {
-	rw.Lock()
+func (m *RWMutex) RLock() {
+	m.RWMutex.RLock()
 }
 
-func (rw *RWMutex) RUnlock() {
-	rw.Unlock()
+func (m *RWMutex) RUnlock() {
+	m.RWMutex.RUnlock()
 }
 
 var (
