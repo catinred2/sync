@@ -3,6 +3,16 @@ Introduction
 
 This package is used to detect deadlock in Go program.
 
+*** Please run the hack script [`hack.sh`](https://github.com/funny/sync/blob/master/) before use. ***
+
+*** Since Go 1.4 we can't use `goc` file outside `runtime` package. ***
+
+*** So now we need to add the `GetGoId()` function into `runtime` package. ***
+
+*** This project provide a shell script to hack the `runtime` package and re-compile it. ***
+
+*** So you need a source-based Go environment and Linux/Mac system. ***
+
 Usage
 =====
 

@@ -3,6 +3,16 @@
 
 这个包用来在开发调试期，帮助排查程序中的死锁情况。
 
+*** 请先运行运行时Hack脚本：[`hack.sh`](https://github.com/funny/sync/blob/master/)。 ***
+
+*** 从Go 1.4开始，我们无法在`runtime`包之外使用`goc`机制。 ***
+
+*** 所以现在我们需要把`GetGoId()`函数加入到`runtime`包。 ***
+
+*** 这个项目提供了一个Shell脚本用来修改和重新编译`runtime`包。***
+
+*** 所以你需要一个包含代码的Go环境和Linux或Mac操作系统。 ***
+
 用法
 ====
 

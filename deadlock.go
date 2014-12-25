@@ -6,7 +6,7 @@ import (
 	"bytes"
 	"container/list"
 	"github.com/funny/debug"
-	"github.com/funny/goid"
+	"runtime"
 	"strconv"
 	"sync"
 )
@@ -81,7 +81,7 @@ func (m *monitor) wait(mode byte) *lockUsage {
 	globalMutex.Lock()
 	defer globalMutex.Unlock()
 
-	waitInfo := &lockUsage{m, mode, goid.Get(), debug.StackTrace(3, 0)}
+	waitInfo := &lockUsage{m, mode, runtime.GetGoId(), debug.StackTrace(3, 0)}
 	waitingList[waitInfo.goid] = waitInfo
 
 	if m.holders == nil {
@@ -118,7 +118,7 @@ func (m *monitor) using(waitInfo *lockUsage) {
 }
 
 func (m *monitor) release(mode byte) {
-	id := goid.Get()
+	id := runtime.GetGoId()
 	for i := m.holders.Back(); i != nil; i = i.Prev() {
 		if info := i.Value.(*lockUsage); info.goid == id && info.mode == mode {
 			m.holders.Remove(i)
